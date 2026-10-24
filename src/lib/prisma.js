@@ -1,18 +1,11 @@
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { PrismaClient } from "../generated/prisma/client.ts";
-import { env } from "../config/env.js";
+import { dbConnectionOptions } from "../config/database.js";
 
 const adapter = new PrismaMariaDb({
-  host: env.DB_HOST,
-  port: env.DB_PORT,
-  user: env.DB_USER,
-  password: env.DB_PASSWORD,
-  database: env.DB_NAME,
+  ...dbConnectionOptions,
   connectionLimit: 5,
-  ssl: { rejectUnauthorized: false },
-  allowPublicKeyRetrieval: true,
+  acquireTimeout: 10000,
 });
 
-export const prisma = new PrismaClient({
-  adapter,
-});
+export const prisma = new PrismaClient({ adapter });
