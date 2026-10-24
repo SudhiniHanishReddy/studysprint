@@ -1,0 +1,14 @@
+node_modules
+# Keep environment variables out of version control
+.env
+
+/generated/prisma
+/src/generated/prisma
+
+# Local/debug artifacts
+cookies.txt
+server-debug.log
+package.json.backup
+
+# Local backup files
+*.bak

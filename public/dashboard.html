@@ -1,0 +1,176 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StudySprint â€” Dashboard</title>
+  <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/modern-dashboard.css">
+</head>
+<body>
+
+  <main class="dashboard">
+    <h1 id="welcome">Loading...</h1>
+
+    <p>
+      XP: <strong id="points">0</strong>
+    </p>
+
+    <p>
+      Current streak: <strong id="streak">0</strong>
+    </p>
+
+    <p>
+      Longest streak: <strong id="longestStreak">0</strong>
+    </p>
+
+    <section class="study-stats" aria-labelledby="studyStatsHeading">
+      <div class="stats-heading">
+  <h2 id="studyStatsHeading">Study statistics</h2>
+  <label class="stats-period-control" for="statsPeriod">
+    <span>View period</span>
+    <select id="statsPeriod">
+      <option value="daily">Today</option>
+      <option value="weekly" selected>Last 7 days</option>
+      <option value="monthly">This month</option>
+    </select>
+  </label>
+</div>
+      <p id="statsMessage" class="stats-message" role="status" aria-live="polite">
+        Loading study statistics...
+      </p>
+
+      
+        <div id="statsContent" hidden>
+        <div class="stats-summary">
+          <article class="stat-card">
+            <h3>Today</h3>
+            <p><strong id="todayStudyTime">â€”</strong> study time</p>
+            <p><strong id="todaySessionCount">â€”</strong> completed sessions</p>
+          </article>
+          <article class="stat-card">
+            <h3>Last 7 days</h3>
+            <p><strong id="weeklyStudyTime">â€”</strong> study time</p>
+          </article>
+        </div>
+
+        <div class="stats-details">
+          <div>
+            <h3 id="subjectChartHeading">Study time by subject (last 7 days)</h3>
+            <div class="subject-breakdown">
+  <div id="subjectDonut" class="subject-donut" role="img" aria-label="Study time distribution by subject">
+    <div class="subject-donut-hole">
+      <strong id="subjectDonutTotal">0 min</strong>
+      <span>Total study time</span>
+    </div>
+  </div>
+  <ul id="subjectTotals" class="subject-totals"></ul>
+</div>
+          </div>
+          <div>
+            <h3 id="dailyChartHeading">Daily study time (last 7 days)</h3>
+            <div
+              id="dailyTotalsChart"
+              class="daily-chart"
+              role="img"
+              aria-label="Daily study time for the last seven days"
+            ></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="topic-analytics" id="topicAnalytics">
+  <h3>Topic-wise study analytics</h3>
+  <p>See how your study time is distributed across topics.</p>
+  <div class="analytics-filters">
+    <label>Period
+      <select id="analyticsPeriod">
+        <option value="daily">Today</option>
+        <option value="weekly" selected>Last 7 days</option>
+        <option value="monthly">This month</option>
+      </select>
+    </label>
+    <label>Track
+      <select id="analyticsTrack">
+        <option value="">All tracks</option>
+      </select>
+    </label>
+    <label>Subject
+      <select id="analyticsSubject">
+        <option value="">All subjects</option>
+      </select>
+    </label>
+  </div>
+  <p id="topicAnalyticsMessage" role="status">Loading topic analytics...</p>
+  <div id="topicTotalsChart" class="topic-chart"></div>
+</div>
+
+    </section>
+
+    <section class="study-session" aria-labelledby="studySessionHeading">
+      <h2 id="studySessionHeading">Study session</h2>
+
+      <div class="session-fields">
+        <label for="trackSelect">Track</label>
+        <select id="trackSelect" disabled>
+          <option value="">Loading tracks...</option>
+        </select>
+
+        <label for="subjectSelect">Subject (optional)</label>
+        <select id="subjectSelect" disabled>
+          <option value="">No subject</option>
+        </select>
+
+        <label for="topicSelect">Topic (optional)</label>
+        <select id="topicSelect" disabled>
+          <option value="">No topic</option>
+        </select>
+      </div>
+
+      <p id="timerDisplay" class="timer-display" role="timer" aria-live="off">
+        00:00:00
+      </p>
+
+      <div class="session-actions">
+        <button id="startSessionBtn" type="button" disabled>Start</button>
+        <button id="finishSessionBtn" type="button" disabled>Finish</button>
+      </div>
+
+      <p id="sessionMessage" class="session-status" role="status" aria-live="polite">
+        Loading your study options...
+      </p>
+    </section>
+
+    <section class="session-history" aria-labelledby="sessionHistoryHeading">
+      <h2 id="sessionHistoryHeading">Recent study sessions</h2>
+      <p id="historyMessage" class="history-message" role="status" aria-live="polite">
+        Loading study history...
+      </p>
+      <div id="historyTableWrap" class="history-table-wrap" hidden>
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Date</th>
+              <th scope="col">Track</th>
+              <th scope="col">Subject</th>
+              <th scope="col">Topic</th>
+              <th scope="col">Duration</th>
+              <th scope="col">Type / source</th>
+            </tr>
+          </thead>
+          <tbody id="historyRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <button id="logoutBtn">Logout</button>
+  </main>
+
+  <script type="module" src="/js/dashboard.js"></script>
+
+</body>
+</html>
+
+
+
+

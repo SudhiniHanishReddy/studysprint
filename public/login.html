@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StudySprint — Login</title>
+  <link rel="stylesheet" href="/css/base.css">
+</head>
+<body>
+
+  <main class="auth-container">
+    <h1>StudySprint</h1>
+    <p>Welcome back</p>
+
+    <form id="loginForm">
+      <label>
+        Email
+        <input type="email" name="email" required>
+      </label>
+
+      <label>
+        Password
+        <input type="password" name="password" required>
+      </label>
+
+      <button type="submit">Login</button>
+    </form>
+
+    <p id="message"></p>
+
+    <a href="/register.html">
+      Don't have an account? Register
+    </a>
+  </main>
+
+  <script type="module" src="/js/auth.js"></script>
+
+</body>
+</html>

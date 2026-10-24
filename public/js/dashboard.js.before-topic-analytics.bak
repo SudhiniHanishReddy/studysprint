@@ -1,0 +1,535 @@
+import { apiRequest } from "/js/api.js";
+
+const trackSelect = document.querySelector("#trackSelect");
+const subjectSelect = document.querySelector("#subjectSelect");
+const topicSelect = document.querySelector("#topicSelect");
+const timerDisplay = document.querySelector("#timerDisplay");
+const startButton = document.querySelector("#startSessionBtn");
+const finishButton = document.querySelector("#finishSessionBtn");
+const sessionMessage = document.querySelector("#sessionMessage");
+const historyMessage = document.querySelector("#historyMessage");
+const historyTableWrap = document.querySelector("#historyTableWrap");
+const historyRows = document.querySelector("#historyRows");
+const statsMessage = document.querySelector("#statsMessage");
+const statsContent = document.querySelector("#statsContent");
+const subjectTotals = document.querySelector("#subjectTotals");
+const dailyTotalsChart = document.querySelector("#dailyTotalsChart");
+
+const state = {
+  tracks: [],
+  activeSession: null,
+  timerInterval: null,
+  ready: false,
+  pending: false,
+  elapsedSeconds: 0,
+};
+
+function setSessionMessage(text, type = "") {
+  sessionMessage.textContent = text;
+  sessionMessage.className = `session-status ${type}`.trim();
+}
+
+function formatTime(totalSeconds) {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  return [hours, minutes, seconds]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
+}
+
+function addOption(select, value, label) {
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = label;
+  select.append(option);
+}
+
+function selectedTrack() {
+  return state.tracks.find(
+    (track) => String(track.id) === trackSelect.value
+  );
+}
+
+function selectedSubject() {
+  return selectedTrack()?.subjects.find(
+    (subject) => String(subject.id) === subjectSelect.value
+  );
+}
+
+function populateSubjects(selectedId = "") {
+  subjectSelect.replaceChildren();
+  addOption(subjectSelect, "", "No subject");
+
+  for (const subject of selectedTrack()?.subjects ?? []) {
+    addOption(subjectSelect, String(subject.id), subject.name);
+  }
+
+  subjectSelect.value = selectedId;
+  subjectSelect.disabled =
+    state.pending || Boolean(state.activeSession) || !selectedTrack();
+  populateTopics();
+}
+
+function populateTopics(selectedId = "") {
+  topicSelect.replaceChildren();
+  addOption(topicSelect, "", "No topic");
+
+  for (const topic of selectedSubject()?.topics ?? []) {
+    addOption(topicSelect, String(topic.id), topic.name);
+  }
+
+  topicSelect.value = selectedId;
+  topicSelect.disabled =
+    state.pending ||
+    Boolean(state.activeSession) ||
+    !selectedSubject();
+}
+
+function renderControls() {
+  const locked = state.pending || Boolean(state.activeSession);
+
+  trackSelect.disabled = locked || !state.ready;
+  subjectSelect.disabled = locked || !selectedTrack();
+  topicSelect.disabled = locked || !selectedSubject();
+  startButton.disabled =
+    !state.ready || state.pending || Boolean(state.activeSession) ||
+    !trackSelect.value;
+  finishButton.disabled =
+    !state.activeSession ||
+    state.pending ||
+    false;
+}
+
+function renderTimer() {
+  if (state.activeSession) {
+    state.elapsedSeconds = Math.max(
+      0,
+      Math.floor(
+        (Date.now() - new Date(state.activeSession.startedAt).getTime()) /
+          1000
+      )
+    );
+  }
+
+  timerDisplay.textContent = formatTime(state.elapsedSeconds);
+  renderControls();
+}
+
+function stopTimer() {
+  if (state.timerInterval) {
+    clearInterval(state.timerInterval);
+    state.timerInterval = null;
+  }
+}
+
+function formatSessionDate(session) {
+  const dateValue = session.localDate ?? session.endedAt;
+  const date = new Date(dateValue);
+
+  if (session.localDate) {
+    const localDate = date.toISOString().slice(0, 10);
+    return new Date(`${localDate}T00:00:00`).toLocaleDateString();
+  }
+
+  return date.toLocaleDateString();
+}
+
+function formatDuration(durationSeconds) {
+  const totalMinutes = Math.floor(durationSeconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours === 0) {
+    return `${minutes} min`;
+  }
+
+  return minutes === 0
+    ? `${hours} hr`
+    : `${hours} hr ${minutes} min`;
+}
+
+function formatStudyTime(durationSeconds) {
+  const minutes = Math.floor(durationSeconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  if (hours === 0) {
+    return `${remainingMinutes} min`;
+  }
+
+  return remainingMinutes === 0
+    ? `${hours} hr`
+    : `${hours} hr ${remainingMinutes} min`;
+}
+
+function renderSubjectTotals(totals) {
+  subjectTotals.replaceChildren();
+
+  if (totals.length === 0) {
+    const item = document.createElement("li");
+    item.textContent = "No study time recorded.";
+    subjectTotals.append(item);
+    return;
+  }
+
+  for (const total of totals) {
+    const item = document.createElement("li");
+    const name = document.createElement("span");
+    const duration = document.createElement("strong");
+    name.textContent = total.subjectName;
+    duration.textContent = formatStudyTime(total.totalSeconds);
+    item.append(name, duration);
+    subjectTotals.append(item);
+  }
+}
+
+function renderDailyTotals(days) {
+  dailyTotalsChart.replaceChildren();
+  const maxSeconds = Math.max(
+    ...days.map((day) => day.totalSeconds),
+    0
+  );
+
+  for (const day of days) {
+    const column = document.createElement("div");
+    column.className = "daily-chart-column";
+
+    const value = document.createElement("span");
+    value.className = "daily-chart-value";
+    value.textContent = formatStudyTime(day.totalSeconds);
+
+    const track = document.createElement("div");
+    track.className = "daily-chart-track";
+
+    const bar = document.createElement("div");
+    bar.className = "daily-chart-bar";
+    const height = maxSeconds === 0
+      ? 0
+      : Math.round((day.totalSeconds / maxSeconds) * 100);
+    bar.style.height = `${height}%`;
+    bar.setAttribute(
+      "aria-label",
+      `${day.date}: ${formatStudyTime(day.totalSeconds)}`
+    );
+    track.append(bar);
+
+    const label = document.createElement("span");
+    label.className = "daily-chart-label";
+    label.textContent = new Date(
+      `${day.date}T00:00:00`
+    ).toLocaleDateString(undefined, { weekday: "short" });
+
+    column.append(value, track, label);
+    dailyTotalsChart.append(column);
+  }
+}
+
+async function loadStudyStats() {
+  statsMessage.textContent = "Loading study statistics...";
+  statsMessage.className = "stats-message";
+  statsContent.hidden = true;
+
+  try {
+    const result = await apiRequest("/api/sessions/stats");
+    const stats = result.stats;
+
+    document.querySelector("#todayStudyTime").textContent =
+      formatStudyTime(stats.today.totalSeconds);
+    document.querySelector("#todaySessionCount").textContent =
+      stats.today.completedSessions;
+    document.querySelector("#weeklyStudyTime").textContent =
+      formatStudyTime(stats.lastSevenDays.totalSeconds);
+    renderSubjectTotals(stats.bySubject);
+    renderDailyTotals(stats.dailyTotals);
+
+    statsMessage.textContent =
+      `Dates follow your account timezone (${stats.timezone}), from ${stats.lastSevenDays.startDate} through ${stats.lastSevenDays.endDate}.`;
+    statsContent.hidden = false;
+  } catch (error) {
+    if (error.status === 401) {
+      window.location.href = "/login.html";
+      return;
+    }
+
+    statsMessage.textContent =
+      `Could not load study statistics: ${error.message}`;
+    statsMessage.className = "stats-message error";
+  }
+}
+
+function appendCell(row, value) {
+  const cell = document.createElement("td");
+  cell.textContent = value || "—";
+  row.append(cell);
+}
+
+async function loadSessionHistory() {
+  historyMessage.textContent = "Loading study history...";
+  historyMessage.className = "history-message";
+  historyTableWrap.hidden = true;
+  historyRows.replaceChildren();
+
+  try {
+    const result = await apiRequest("/api/sessions/history");
+
+    if (result.sessions.length === 0) {
+      historyMessage.textContent =
+        "No completed study sessions yet.";
+      return;
+    }
+
+    for (const session of result.sessions) {
+      const row = document.createElement("tr");
+      appendCell(row, formatSessionDate(session));
+      appendCell(row, session.track.name);
+      appendCell(row, session.subject?.name);
+      appendCell(row, session.topic?.name);
+      appendCell(row, formatDuration(session.durationSeconds));
+      appendCell(row, `${session.kind} · ${session.source}`);
+      historyRows.append(row);
+    }
+
+    historyMessage.textContent =
+      `Showing the ${result.sessions.length} most recent completed sessions.`;
+    historyTableWrap.hidden = false;
+  } catch (error) {
+    if (error.status === 401) {
+      window.location.href = "/login.html";
+      return;
+    }
+
+    historyMessage.textContent =
+      `Could not load study history: ${error.message}`;
+    historyMessage.className = "history-message error";
+  }
+}
+
+function beginTimer(session, successMessage = "") {
+  stopTimer();
+  state.activeSession = session;
+
+  trackSelect.value = String(session.trackId);
+  populateSubjects(
+    session.subjectId ? String(session.subjectId) : ""
+  );
+  populateTopics(
+    session.topicId ? String(session.topicId) : ""
+  );
+
+  renderTimer();
+  state.timerInterval = setInterval(renderTimer, 1000);
+  renderControls();
+
+  const selectedTrackName = selectedTrack()?.name;
+  const selectedSubjectName = selectedSubject()?.name;
+  const context = [selectedTrackName, selectedSubjectName]
+    .filter(Boolean)
+    .join(" / ");
+  setSessionMessage(
+    successMessage || `Active session${context ? `: ${context}` : ""}.`
+  );
+}
+
+async function loadSessionData() {
+  const [optionsResult, activeResult] = await Promise.all([
+    apiRequest("/api/sessions/options"),
+    apiRequest("/api/sessions/active"),
+  ]);
+
+  state.tracks = optionsResult.tracks;
+  trackSelect.replaceChildren();
+  addOption(trackSelect, "", "Select a track");
+
+  for (const track of state.tracks) {
+    addOption(trackSelect, String(track.id), track.name);
+  }
+
+  state.ready = true;
+
+  if (activeResult.session) {
+    beginTimer(activeResult.session);
+  } else if (state.tracks.length === 0) {
+    setSessionMessage("No available tracks were found.", "error");
+  } else {
+    setSessionMessage("Choose a track, then start studying.");
+  }
+
+  renderControls();
+}
+
+async function loadDashboard() {
+  try {
+    const result = await apiRequest("/api/auth/me");
+    const user = result.user;
+
+    document.querySelector("#welcome").textContent =
+      `Welcome, ${user.username}!`;
+
+    document.querySelector("#points").textContent =
+      user.points;
+
+    document.querySelector("#streak").textContent =
+      user.streak;
+
+    document.querySelector("#longestStreak").textContent =
+      user.longestStreak;
+  } catch {
+    window.location.href = "/login.html";
+    return;
+  }
+
+  try {
+    await loadSessionData();
+  } catch (error) {
+    if (error.status === 401) {
+      window.location.href = "/login.html";
+      return;
+    }
+
+    setSessionMessage(
+      `${error.message}. Reload the page to retry loading study data.`,
+      "error"
+    );
+    renderControls();
+  }
+
+  await loadSessionHistory();
+  await loadStudyStats();
+}
+
+trackSelect.addEventListener("change", () => {
+  populateSubjects();
+  renderControls();
+});
+
+subjectSelect.addEventListener("change", () => {
+  populateTopics();
+  renderControls();
+});
+
+startButton.addEventListener("click", async () => {
+  if (!state.ready || state.pending || state.activeSession) return;
+
+  const body = {
+    trackId: Number(trackSelect.value),
+  };
+
+  if (subjectSelect.value) {
+    body.subjectId = Number(subjectSelect.value);
+  }
+  if (topicSelect.value) {
+    body.topicId = Number(topicSelect.value);
+  }
+
+  state.pending = true;
+  renderControls();
+  setSessionMessage("Starting your session...");
+
+  try {
+    const result = await apiRequest("/api/sessions/start", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+
+    beginTimer(result.session);
+  } catch (error) {
+    try {
+      const activeResult = await apiRequest("/api/sessions/active");
+      if (activeResult.session) {
+        beginTimer(activeResult.session);
+        setSessionMessage(
+          "The start response was interrupted; the active session was restored.",
+          "success"
+        );
+        return;
+      }
+
+      setSessionMessage(error.message, "error");
+    } catch (syncError) {
+      state.ready = false;
+      setSessionMessage(
+        `${error.message}. Could not verify session state (${syncError.message}); reload before trying again.`,
+        "error"
+      );
+    }
+  } finally {
+    state.pending = false;
+    renderControls();
+  }
+});
+
+finishButton.addEventListener("click", async () => {
+  if (
+    !state.activeSession ||
+    state.pending ||
+    false
+  ) return;
+
+  state.pending = true;
+  renderControls();
+  setSessionMessage("Finishing your session...");
+
+  try {
+    const result = await apiRequest("/api/sessions/complete", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: state.activeSession.id,
+      }),
+    });
+
+    stopTimer();
+    state.elapsedSeconds = result.session.durationSeconds;
+    state.activeSession = null;
+    renderTimer();
+    trackSelect.value = "";
+    populateSubjects();
+    renderControls();
+
+    const points = document.querySelector("#points");
+    let pointsSyncFailed = false;
+    try {
+      const currentUser = await apiRequest("/api/auth/me");
+      points.textContent = currentUser.user.points;
+    } catch {
+      pointsSyncFailed = true;
+    }
+
+    const completionMessage = result.alreadyCompleted
+      ? "Session was already completed."
+      : `Session finished. ${formatTime(result.session.durationSeconds)} recorded; ${result.xp} XP earned.`;
+    setSessionMessage(
+      pointsSyncFailed
+        ? `${completionMessage} XP total could not be refreshed.`
+        : completionMessage,
+      "success"
+    );
+    await Promise.all([
+      loadSessionHistory(),
+      loadStudyStats(),
+    ]);
+  } catch (error) {
+    setSessionMessage(error.message, "error");
+  } finally {
+    state.pending = false;
+    renderControls();
+  }
+});
+
+document.querySelector("#logoutBtn").addEventListener(
+  "click",
+  async () => {
+    try {
+      await apiRequest("/api/auth/logout", {
+        method: "POST",
+      });
+    } finally {
+      window.location.href = "/login.html";
+    }
+  }
+);
+
+loadDashboard();
+  
+

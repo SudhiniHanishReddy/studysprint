@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StudySprint — Register</title>
+  <link rel="stylesheet" href="/css/base.css">
+</head>
+<body>
+
+  <main class="auth-container">
+    <h1>StudySprint</h1>
+    <p>Create your account</p>
+
+    <form id="registerForm">
+      <label>
+        Username
+        <input
+          type="text"
+          name="username"
+          minlength="3"
+          maxlength="30"
+          required
+        >
+      </label>
+
+      <label>
+        Email
+        <input
+          type="email"
+          name="email"
+          required
+        >
+      </label>
+
+      <label>
+        Password
+        <input
+          type="password"
+          name="password"
+          minlength="8"
+          maxlength="128"
+          required
+        >
+      </label>
+
+      <button type="submit">Create account</button>
+    </form>
+
+    <p id="message"></p>
+
+    <a href="/login.html">Already have an account? Login</a>
+  </main>
+
+  <script type="module" src="/js/auth.js"></script>
+</body>
+</html>

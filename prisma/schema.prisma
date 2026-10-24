@@ -1,0 +1,301 @@
+generator client {
+  provider               = "prisma-client"
+  output                 = "../src/generated/prisma"
+  moduleFormat           = "esm"
+  runtime                = "nodejs"
+  generatedFileExtension = "ts"
+  importFileExtension    = "ts"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum GoalReminderType {
+  NONE
+}
+
+enum SessionKind {
+  STUDY
+  PRACTICE
+}
+
+enum SessionSource {
+  TIMER
+  MANUAL
+}
+
+enum XpReason {
+  SESSION
+  GOAL_COMPLETION
+  BADGE
+  STREAK
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+}
+
+model User {
+  id       Int    @id @default(autoincrement())
+  username String @unique @db.VarChar(50)
+  email    String @unique @db.VarChar(100)
+
+  passwordHash String @map("password_hash") @db.VarChar(255)
+
+  // Cached total XP. XP history remains in XpTransaction.
+  points            Int     @default(0)
+  timezone          String  @default("UTC") @db.VarChar(50)
+  showOnLeaderboard Boolean @default(true) @map("show_on_leaderboard")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  customTracks Track[] @relation("CustomTracks")
+
+  goals    Goal[]
+  sessions Session[]
+
+  xpTransactions XpTransaction[]
+
+  userBadges UserBadge[]
+
+  lowFriendships       Friendship[] @relation("LowFriendships")
+  highFriendships      Friendship[] @relation("HighFriendships")
+  requestedFriendships Friendship[] @relation("RequestedFriendships")
+
+  @@index([points])
+  @@map("users")
+}
+
+model Track {
+  id Int @id @default(autoincrement())
+
+  // Built-in tracks use a unique key.
+  // Custom activities have NULL here.
+  builtInKey String? @unique @map("built_in_key") @db.VarChar(50)
+
+  name String @db.VarChar(100)
+
+  // NULL = built-in track
+  // non-NULL = user-created custom activity
+  ownerId Int? @map("owner_id")
+
+  dailyTargetMinutes Int? @map("daily_target_minutes")
+
+  archivedAt DateTime? @map("archived_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  owner User? @relation("CustomTracks", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  subjects Subject[]
+  goals    Goal[]
+  sessions Session[]
+
+  @@unique([ownerId, name])
+  @@index([ownerId, archivedAt])
+  @@map("tracks")
+}
+
+model Subject {
+  id      Int @id @default(autoincrement())
+  trackId Int @map("track_id")
+
+  name      String @db.VarChar(100)
+  slug      String @db.VarChar(120)
+  sortOrder Int    @default(0) @map("sort_order")
+
+  track    Track     @relation(fields: [trackId], references: [id], onDelete: Restrict)
+  topics   Topic[]
+  goals    Goal[]
+  sessions Session[]
+
+  @@unique([trackId, slug])
+  @@index([trackId, sortOrder])
+  @@map("subjects")
+}
+
+model Topic {
+  id        Int @id @default(autoincrement())
+  subjectId Int @map("subject_id")
+
+  name      String  @db.VarChar(150)
+  slug      String  @db.VarChar(160)
+  sortOrder Int     @default(0) @map("sort_order")
+  isActive  Boolean @default(true) @map("is_active")
+
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+
+  goals    Goal[]
+  sessions Session[]
+
+  @@unique([subjectId, slug])
+  @@index([subjectId, sortOrder])
+  @@map("topics")
+}
+
+model Goal {
+  id      Int @id @default(autoincrement())
+  userId  Int @map("user_id")
+  trackId Int @map("track_id")
+
+  subjectId Int? @map("subject_id")
+  topicId   Int? @map("topic_id")
+
+  title         String @db.VarChar(180)
+  targetMinutes Int    @map("target_minutes")
+
+  scheduledAt DateTime? @map("scheduled_at")
+
+  // Reminder is relative to scheduledAt.
+  // Example: 15 = remind 15 minutes before.
+  reminderMinutesBefore Int? @map("reminder_minutes_before")
+
+  completedAt DateTime? @map("completed_at")
+  archivedAt  DateTime? @map("archived_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track   Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
+  subject Subject? @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  topic   Topic?   @relation(fields: [topicId], references: [id], onDelete: Restrict)
+
+  sessions       Session[]
+  xpTransactions XpTransaction[]
+
+  @@index([userId, scheduledAt])
+  @@index([userId, completedAt])
+  @@map("goals")
+}
+
+model Session {
+  id Int @id @default(autoincrement())
+
+  userId  Int @map("user_id")
+  trackId Int @map("track_id")
+
+  subjectId Int? @map("subject_id")
+  topicId   Int? @map("topic_id")
+  goalId    Int? @map("goal_id")
+
+  kind   SessionKind
+  source SessionSource
+
+  title       String? @db.VarChar(180)
+  resourceUrl String? @map("resource_url") @db.VarChar(2048)
+
+  // Server-controlled timestamps.
+  startedAt DateTime  @map("started_at")
+  endedAt   DateTime? @map("ended_at")
+
+  durationSeconds Int? @map("duration_seconds")
+
+  isCapped Boolean @default(false) @map("is_capped")
+
+  // NULL when active; set by server when session ends.
+  localDate DateTime? @map("local_date") @db.Date
+
+  // 1 while active, NULL after completion/discard.
+  // UNIQUE(userId, activeFlag) => one active session per user.
+  activeFlag Boolean? @map("active_flag")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track   Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
+  subject Subject? @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  topic   Topic?   @relation(fields: [topicId], references: [id], onDelete: Restrict)
+  goal    Goal?    @relation(fields: [goalId], references: [id], onDelete: SetNull)
+
+  xpTransactions XpTransaction[]
+
+  @@unique([userId, activeFlag])
+  @@index([userId, localDate])
+  @@index([userId, trackId, localDate])
+  @@index([userId, startedAt])
+  @@index([goalId])
+  @@map("sessions")
+}
+
+model XpTransaction {
+  id     Int @id @default(autoincrement())
+  userId Int @map("user_id")
+
+  amount Int
+  reason XpReason
+
+  dedupeKey String @unique @map("dedupe_key") @db.VarChar(191)
+
+  sessionId Int? @map("session_id")
+  goalId    Int? @map("goal_id")
+  badgeId   Int? @map("badge_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  goal    Goal?    @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  badge   Badge?   @relation(fields: [badgeId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([userId, reason])
+  @@map("xp_transactions")
+}
+
+model Badge {
+  id          Int     @id @default(autoincrement())
+  code        String  @unique @db.VarChar(60)
+  name        String  @db.VarChar(100)
+  description String? @db.VarChar(255)
+  icon        String? @db.VarChar(50)
+
+  userBadges     UserBadge[]
+  xpTransactions XpTransaction[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  id      Int @id @default(autoincrement())
+  userId  Int @map("user_id")
+  badgeId Int @map("badge_id")
+
+  awardedAt DateTime @default(now()) @map("awarded_at")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+  @@index([userId])
+  @@map("user_badges")
+}
+
+model Friendship {
+  id Int @id @default(autoincrement())
+
+  userLowId  Int @map("user_low_id")
+  userHighId Int @map("user_high_id")
+
+  // Must equal either userLowId or userHighId.
+  // Validated by the service.
+  requestedById Int @map("requested_by_id")
+
+  status FriendshipStatus @default(PENDING)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  userLow  User @relation("LowFriendships", fields: [userLowId], references: [id], onDelete: Cascade)
+  userHigh User @relation("HighFriendships", fields: [userHighId], references: [id], onDelete: Cascade)
+
+  requestedBy User @relation("RequestedFriendships", fields: [requestedById], references: [id], onDelete: Cascade)
+
+  @@unique([userLowId, userHighId])
+  @@index([userLowId, status])
+  @@index([userHighId, status])
+  @@index([requestedById])
+  @@map("friendships")
+}
