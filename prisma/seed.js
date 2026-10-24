@@ -196,27 +196,43 @@ const syllabus = {
 
 async function main() {
   for (const [builtInKey, subjects] of Object.entries(syllabus)) {
-    const track = await prisma.track.findUnique({
+    const trackNames = {
+      JEE_MAIN: "JEE Main",
+      JEE_ADVANCED: "JEE Advanced",
+      NEET: "NEET",
+      DSA_CODING: "DSA / Coding",
+    };
+
+    const track = await prisma.track.upsert({
       where: { builtInKey },
+      update: { name: trackNames[builtInKey], archivedAt: null },
+      create: { builtInKey, name: trackNames[builtInKey] },
     });
 
-    if (!track) {
-      throw new Error(`Track not found: ${builtInKey}`);
-    }
+    for (const [subjectIndex, [subjectName, topics]] of Object.entries(subjects).entries()) {
+      const slug = subjectName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
 
-    for (const [subjectName, topics] of Object.entries(subjects)) {
-      const subject = await prisma.subject.findFirst({
+      const subject = await prisma.subject.upsert({
         where: {
+          trackId_slug: {
+            trackId: track.id,
+            slug,
+          },
+        },
+        update: {
+          name: subjectName,
+          sortOrder: subjectIndex + 1,
+        },
+        create: {
           trackId: track.id,
           name: subjectName,
+          slug,
+          sortOrder: subjectIndex + 1,
         },
       });
-
-      if (!subject) {
-        throw new Error(
-          `Subject not found: ${subjectName} in ${track.name}`
-        );
-      }
 
       for (let i = 0; i < topics.length; i++) {
         const name = topics[i];
